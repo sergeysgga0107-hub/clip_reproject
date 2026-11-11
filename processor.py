@@ -1,4 +1,3 @@
-
 # -*- coding: utf-8 -*-
 """
 ClipReproject — модуль обработки геоданных.
@@ -33,11 +32,7 @@ class Processor:
     @classmethod
     def log(cls, message, level=Qgis.Info):
         """Записать сообщение в журнал QGIS."""
-        QgsMessageLog.logMessage(
-            message,
-            cls.LOG_TAG,
-            level
-        )
+        QgsMessageLog.logMessage(message, cls.LOG_TAG, level)
 
     def process(self, params):
         """Выполнить выбор, обрезку и перепроецирование."""
@@ -58,142 +53,80 @@ class Processor:
 
             # Проверяем входные данные
             if not os.path.isdir(osm_dir):
-                raise ValueError(
-                    "Папка исходных слоёв не существует."
-                )
+                raise ValueError("Папка исходных слоёв не существует.")
 
             if not os.path.isfile(boundary_path):
-                raise ValueError(
-                    "Файл границ не существует."
-                )
+                raise ValueError("Файл границ не существует.")
 
             if not os.path.isdir(result_dir):
-                raise ValueError(
-                    "Папка результатов не существует."
-                )
+                raise ValueError("Папка результатов не существует.")
 
             if not field_name or not field_value:
-                raise ValueError(
-                    "Не указаны поле или значение атрибута."
-                )
+                raise ValueError("Не указаны поле или значение атрибута.")
 
             epsg = epsg.upper().removeprefix("EPSG:").strip()
 
             if not epsg.isdigit():
                 raise ValueError("Неверный EPSG-код.")
 
-            target_crs = QgsCoordinateReferenceSystem(
-                "EPSG:" + epsg
-            )
+            target_crs = QgsCoordinateReferenceSystem("EPSG:" + epsg)
 
             if not target_crs.isValid():
-                raise ValueError(
-                    "Целевая система координат не найдена."
-                )
+                raise ValueError("Целевая система координат не найдена.")
 
             crs_name = target_crs.description().upper()
 
-            if target_crs.isGeographic() or not (
-                "GSK-2011" in crs_name
-                or "ГСК-2011" in crs_name
-            ):
-                raise ValueError(
-                    "Требуется проекционная система ГСК-2011."
-                )
+            if target_crs.isGeographic() or not ("GSK-2011" in crs_name or "ГСК-2011" in crs_name):
+                raise ValueError("Требуется проекционная система ГСК-2011.")
 
             # Загружаем границы
-            feedback.setProgressText(
-                "Загрузка административных границ"
-            )
+            feedback.setProgressText("Загрузка административных границ")
 
             boundary = self.load_boundary(boundary_path)
 
             # Выбираем территорию
-            mask = self.select_territory(
-                boundary,
-                field_name,
-                field_value
-            )
+            mask = self.select_territory(boundary, field_name, field_value)
 
-            self.log(
-                f"Выбрана территория: "
-                f"{field_name} = {field_value}"
-            )
+            self.log(f"Выбрана территория: {field_name} = {field_value}")
 
             # Загружаем входные слои
-            layers = self.load_input_layers(
-                osm_dir,
-                boundary_path,
-                boundary
-            )
+            layers = self.load_input_layers(osm_dir, boundary_path, boundary)
 
             total = len(layers)
 
-            self.log(
-                f"Найдено входных слоёв: {total}"
-            )
+            self.log(f"Найдено входных слоёв: {total}")
 
             # Создаём папку результатов
-            output_dir = tempfile.mkdtemp(
-                prefix="result_",
-                dir=result_dir
-            )
+            output_dir = tempfile.mkdtemp(prefix="result_", dir=result_dir)
 
             # Обрабатываем слои
             for index, layer in enumerate(layers, start=1):
-
-                progress_before = int(
-                    (index - 1) / total * 100
-                )
+                progress_before = int((index - 1) / total * 100)
 
                 feedback.setProgress(progress_before)
 
-                message = (
-                    f"Обработка {index}/{total}: "
-                    f"{layer.name()}"
-                )
+                message = f"Обработка {index}/{total}: {layer.name()}"
 
                 feedback.setProgressText(message)
-                self.log(
-                    f"{message} — {progress_before}%"
-                )
+                self.log(f"{message} — {progress_before}%")
 
-                output_path = os.path.join(
-                    output_dir,
-                    f"layer_{index:03d}_gsk2011.gpkg"
-                )
+                output_path = os.path.join(output_dir, f"layer_{index:03d}_gsk2011.gpkg")
 
-                result_layer = self.process_layer(
-                    layer,
-                    mask,
-                    target_crs,
-                    output_path,
-                    feedback
-                )
+                result_layer = self.process_layer(layer, mask, target_crs, output_path, feedback)
 
-                QgsProject.instance().addMapLayer(
-                    result_layer
-                )
+                QgsProject.instance().addMapLayer(result_layer)
 
                 saved_count += 1
 
                 progress = int(index / total * 100)
                 feedback.setProgress(progress)
 
-                self.log(
-                    f"Слой {index}/{total} сохранён. "
-                    f"Прогресс: {progress}%"
-                )
+                self.log(f"Слой {index}/{total} сохранён. Прогресс: {progress}%")
 
             feedback.setProgress(100)
-            feedback.setProgressText(
-                "Обработка успешно завершена"
-            )
+            feedback.setProgressText("Обработка успешно завершена")
 
-            self.log(
-                f"Обработка завершена. "
-                f"Сохранено слоёв: {saved_count}"
-            )
+            self.log(f"Обработка завершена. Сохранено слоёв: {saved_count}")
 
             return {
                 "saved_count": saved_count,
@@ -202,24 +135,14 @@ class Processor:
             }
 
         except Exception as error:
-
-            message = (
-                f"Ошибка обработки: {error}\n"
-                f"Успешно сохранено слоёв: {saved_count}"
-            )
+            message = f"Ошибка обработки: {error}\nУспешно сохранено слоёв: {saved_count}"
 
             if output_dir:
-                message += (
-                    f"\nПапка частичных результатов:\n"
-                    f"{output_dir}"
-                )
+                message += f"\nПапка частичных результатов:\n{output_dir}"
 
             self.log(message, Qgis.Critical)
 
-            feedback.reportError(
-                message,
-                fatalError=True
-            )
+            feedback.reportError(message, fatalError=True)
 
             raise RuntimeError(message) from error
 
@@ -227,26 +150,16 @@ class Processor:
     def load_boundary(boundary_path):
         """Загрузить административные границы."""
 
-        layer = QgsVectorLayer(
-            boundary_path,
-            "Граница территории",
-            "ogr"
-        )
+        layer = QgsVectorLayer(boundary_path, "Граница территории", "ogr")
 
         if not layer.isValid():
-            raise ValueError(
-                "Не удалось открыть административный слой."
-            )
+            raise ValueError("Не удалось открыть административный слой.")
 
         if layer.geometryType() != QgsWkbTypes.PolygonGeometry:
-            raise ValueError(
-                "Административный слой должен быть полигональным."
-            )
+            raise ValueError("Административный слой должен быть полигональным.")
 
         if not layer.crs().isValid():
-            raise ValueError(
-                "Не определена система координат границ."
-            )
+            raise ValueError("Не определена система координат границ.")
 
         return layer
 
@@ -255,9 +168,7 @@ class Processor:
         """Найти территорию по значению атрибута."""
 
         if boundary.fields().indexFromName(field_name) == -1:
-            raise ValueError(
-                "Поле не найдено: " + field_name
-            )
+            raise ValueError("Поле не найдено: " + field_name)
 
         expression = (
             "to_string("
@@ -269,13 +180,9 @@ class Processor:
         boundary.selectByExpression(expression)
 
         if boundary.selectedFeatureCount() == 0:
-            raise ValueError(
-                "Территория с указанным атрибутом не найдена."
-            )
+            raise ValueError("Территория с указанным атрибутом не найдена.")
 
-        request = QgsFeatureRequest().setFilterFids(
-            boundary.selectedFeatureIds()
-        )
+        request = QgsFeatureRequest().setFilterFids(boundary.selectedFeatureIds())
 
         return boundary.materialize(request)
 
@@ -287,46 +194,28 @@ class Processor:
         registry = QgsProviderRegistry.instance()
 
         for filename in sorted(os.listdir(osm_dir)):
-
-            if not filename.lower().endswith(
-                (".shp", ".gpkg")
-            ):
+            if not filename.lower().endswith((".shp", ".gpkg")):
                 continue
 
             path = os.path.join(osm_dir, filename)
 
             if os.path.normcase(os.path.realpath(path)) == (
-                os.path.normcase(
-                    os.path.realpath(boundary_path)
-                )
+                os.path.normcase(os.path.realpath(boundary_path))
             ):
                 continue
 
             details = registry.querySublayers(path)
 
-            vector_details = [
-                item for item in details
-                if item.type() == Qgis.LayerType.Vector
-            ]
+            vector_details = [item for item in details if item.type() == Qgis.LayerType.Vector]
 
             if not vector_details:
-                raise ValueError(
-                    "Векторные слои не найдены: " + filename
-                )
+                raise ValueError("Векторные слои не найдены: " + filename)
 
             for item in vector_details:
-
-                layer = QgsVectorLayer(
-                    item.uri(),
-                    item.name(),
-                    item.providerKey()
-                )
+                layer = QgsVectorLayer(item.uri(), item.name(), item.providerKey())
 
                 if not layer.isValid():
-                    raise ValueError(
-                        "Не удалось открыть слой: "
-                        + item.name()
-                    )
+                    raise ValueError("Не удалось открыть слой: " + item.name())
 
                 if layer.geometryType() not in (
                     QgsWkbTypes.PointGeometry,
@@ -336,53 +225,32 @@ class Processor:
                     continue
 
                 if not layer.crs().isValid():
-                    raise ValueError(
-                        "Не определена СК слоя: "
-                        + item.name()
-                    )
+                    raise ValueError("Не определена СК слоя: " + item.name())
 
                 if layer.crs() != boundary.crs():
-                    raise ValueError(
-                        "Системы координат не совпадают: "
-                        + item.name()
-                    )
+                    raise ValueError("Системы координат не совпадают: " + item.name())
 
                 layers.append(layer)
 
         if not layers:
-            raise ValueError(
-                "В папке нет подходящих векторных слоёв."
-            )
+            raise ValueError("В папке нет подходящих векторных слоёв.")
 
-        geometry_types = {
-            layer.geometryType() for layer in layers
-        }
+        geometry_types = {layer.geometryType() for layer in layers}
 
         if not {
             QgsWkbTypes.LineGeometry,
             QgsWkbTypes.PolygonGeometry,
         }.issubset(geometry_types):
-            raise ValueError(
-                "Нужен минимум один линейный "
-                "и один полигональный слой."
-            )
+            raise ValueError("Нужен минимум один линейный и один полигональный слой.")
 
         return layers
 
     @staticmethod
-    def process_layer(
-        layer,
-        mask,
-        target_crs,
-        output_path,
-        feedback
-    ):
+    def process_layer(layer, mask, target_crs, output_path, feedback):
         """Обрезать, перепроецировать и сохранить слой."""
 
         try:
-            feedback.setProgressText(
-                "Обрезка: " + layer.name()
-            )
+            feedback.setProgressText("Обрезка: " + layer.name())
 
             clipped = processing.run(
                 "native:clip",
@@ -391,18 +259,14 @@ class Processor:
                     "OVERLAY": mask,
                     "OUTPUT": "TEMPORARY_OUTPUT",
                 },
-                feedback=feedback
+                feedback=feedback,
             )["OUTPUT"]
 
         except Exception as error:
-            raise RuntimeError(
-                f"Ошибка обрезки слоя {layer.name()}: {error}"
-            ) from error
+            raise RuntimeError(f"Ошибка обрезки слоя {layer.name()}: {error}") from error
 
         try:
-            feedback.setProgressText(
-                "Перепроецирование: " + layer.name()
-            )
+            feedback.setProgressText("Перепроецирование: " + layer.name())
 
             processing.run(
                 "native:reprojectlayer",
@@ -411,25 +275,15 @@ class Processor:
                     "TARGET_CRS": target_crs,
                     "OUTPUT": output_path,
                 },
-                feedback=feedback
+                feedback=feedback,
             )
 
         except Exception as error:
-            raise RuntimeError(
-                f"Ошибка перепроецирования "
-                f"слоя {layer.name()}: {error}"
-            ) from error
+            raise RuntimeError(f"Ошибка перепроецирования слоя {layer.name()}: {error}") from error
 
-        result_layer = QgsVectorLayer(
-            output_path,
-            layer.name() + "_ГСК2011",
-            "ogr"
-        )
+        result_layer = QgsVectorLayer(output_path, layer.name() + "_ГСК2011", "ogr")
 
         if not result_layer.isValid():
-            raise RuntimeError(
-                "Не удалось открыть результат: "
-                + output_path
-            )
+            raise RuntimeError("Не удалось открыть результат: " + output_path)
 
         return result_layer

@@ -33,4 +33,5 @@ def classFactory(iface):  # pylint: disable=invalid-name
     """
     #
     from .clip_reproject import ClipReproject
+
     return ClipReproject(iface)

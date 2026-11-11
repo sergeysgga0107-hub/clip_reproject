@@ -22,10 +22,8 @@
  ***************************************************************************/
 """
 
-
 import os
 
-from qgis.PyQt import uic, QtWidgets
 from qgis.core import (
     QgsCoordinateReferenceSystem,
     QgsExpression,
@@ -33,14 +31,12 @@ from qgis.core import (
     QgsVectorLayer,
     QgsWkbTypes,
 )
+from qgis.PyQt import QtWidgets, uic
 
 FORM_CLASS, _ = uic.loadUiType(
-    os.path.join(
-        os.path.dirname(__file__),
-        "clip_reproject_dialog_base.ui"
-    ),
+    os.path.join(os.path.dirname(__file__), "clip_reproject_dialog_base.ui"),
     from_imports=True,
-    import_from="clip_reproject"
+    import_from="clip_reproject",
 )
 
 
@@ -70,122 +66,73 @@ class ClipReprojectDialog(QtWidgets.QDialog, FORM_CLASS):
 
         # Проверка папки исходных слоёв
         if not os.path.isdir(params["osm_dir"]):
-            raise ValueError(
-                "Укажите существующую папку со слоями OSM."
-            )
+            raise ValueError("Укажите существующую папку со слоями OSM.")
 
         # Проверка административного файла
         boundary_path = params["boundary_path"]
 
         if not os.path.isfile(boundary_path):
-            raise ValueError(
-                "Файл административных границ не найден."
-            )
+            raise ValueError("Файл административных границ не найден.")
 
-        if not boundary_path.lower().endswith(
-            (".shp", ".gpkg")
-        ):
-            raise ValueError(
-                "Файл границ должен иметь формат SHP или GPKG."
-            )
+        if not boundary_path.lower().endswith((".shp", ".gpkg")):
+            raise ValueError("Файл границ должен иметь формат SHP или GPKG.")
 
         # Проверка выходной папки
         if not os.path.isdir(params["result_dir"]):
-            raise ValueError(
-                "Укажите существующую папку результатов."
-            )
+            raise ValueError("Укажите существующую папку результатов.")
 
         # Проверка полей
         if not params["field_name"]:
-            raise ValueError(
-                "Введите имя атрибутивного поля."
-            )
+            raise ValueError("Введите имя атрибутивного поля.")
 
         if not params["field_value"]:
-            raise ValueError(
-                "Введите значение атрибута территории."
-            )
+            raise ValueError("Введите значение атрибута территории.")
 
         # Проверка EPSG
         epsg = params["epsg"].upper()
         epsg = epsg.removeprefix("EPSG:").strip()
 
         if not epsg.isdigit():
-            raise ValueError(
-                "EPSG-код должен содержать только цифры."
-            )
+            raise ValueError("EPSG-код должен содержать только цифры.")
 
-        crs = QgsCoordinateReferenceSystem(
-            "EPSG:" + epsg
-        )
+        crs = QgsCoordinateReferenceSystem("EPSG:" + epsg)
 
         if not crs.isValid():
-            raise ValueError(
-                "Указанная система координат не существует."
-            )
+            raise ValueError("Указанная система координат не существует.")
 
         crs_name = crs.description().upper()
 
-        if crs.isGeographic() or not (
-            "GSK-2011" in crs_name
-            or "ГСК-2011" in crs_name
-        ):
-            raise ValueError(
-                "Выберите проекционную систему ГСК-2011."
-            )
+        if crs.isGeographic() or not ("GSK-2011" in crs_name or "ГСК-2011" in crs_name):
+            raise ValueError("Выберите проекционную систему ГСК-2011.")
 
         # Проверка административного слоя
-        boundary = QgsVectorLayer(
-            boundary_path,
-            "Проверка административных границ",
-            "ogr"
-        )
+        boundary = QgsVectorLayer(boundary_path, "Проверка административных границ", "ogr")
 
         if not boundary.isValid():
-            raise ValueError(
-                "Не удалось открыть административный слой."
-            )
+            raise ValueError("Не удалось открыть административный слой.")
 
         if boundary.geometryType() != QgsWkbTypes.PolygonGeometry:
-            raise ValueError(
-                "Административная граница должна быть полигоном."
-            )
+            raise ValueError("Административная граница должна быть полигоном.")
 
         if not boundary.crs().isValid():
-            raise ValueError(
-                "У административного слоя не определена СК."
-            )
+            raise ValueError("У административного слоя не определена СК.")
 
-        if boundary.fields().indexFromName(
-            params["field_name"]
-        ) == -1:
-            raise ValueError(
-                "В административном слое отсутствует поле: "
-                + params["field_name"]
-            )
+        if boundary.fields().indexFromName(params["field_name"]) == -1:
+            raise ValueError("В административном слое отсутствует поле: " + params["field_name"])
 
         # Проверка значения атрибута
         expression = (
             "to_string("
-            + QgsExpression.quotedColumnRef(
-                params["field_name"]
-            )
+            + QgsExpression.quotedColumnRef(params["field_name"])
             + ") = "
-            + QgsExpression.quotedString(
-                params["field_value"]
-            )
+            + QgsExpression.quotedString(params["field_value"])
         )
 
-        request = QgsFeatureRequest().setFilterExpression(
-            expression
-        )
+        request = QgsFeatureRequest().setFilterExpression(expression)
         request.setLimit(1)
 
         if next(boundary.getFeatures(request), None) is None:
-            raise ValueError(
-                "Территория с указанным значением "
-                "атрибута не найдена."
-            )
+            raise ValueError("Территория с указанным значением атрибута не найдена.")
 
         return True
 
@@ -196,11 +143,7 @@ class ClipReprojectDialog(QtWidgets.QDialog, FORM_CLASS):
             self.validate_inputs()
 
         except ValueError as error:
-            QtWidgets.QMessageBox.warning(
-                self,
-                "Ошибка ввода данных",
-                str(error)
-            )
+            QtWidgets.QMessageBox.warning(self, "Ошибка ввода данных", str(error))
             return
 
         super().accept()
