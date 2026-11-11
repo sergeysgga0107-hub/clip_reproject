@@ -1,0 +1,47 @@
+# This file contains metadata for your plugin.
+
+# This file should be included when you package your plugin.# Mandatory items:
+
+[general]
+name=Подготовка данных OSM
+qgisMinimumVersion=3.44
+description=Обрезка слоёв OSM по границе территории и перевод в ГСК-2011
+version=0.1
+author=Makarov Sergey
+email=msd20.05@mail.ru
+
+about=Плагин предназначен для подготовки пространственных данных OpenStreetMap. Он выбирает территорию по заданному полю и значению атрибута, обрезает линейные и полигональные слои по её административной границе, перепроецирует результаты в выбранную систему координат ГСК-2011 и сохраняет их в указанную папку. В практической работе обработка выполняется для территории Орловской области.
+
+tracker=https://example.com/issues
+repository=https://example.com/repository
+# End of mandatory metadata
+
+# Recommended items:
+
+hasProcessingProvider=no
+# Uncomment the following line and add your changelog:
+# changelog=
+
+# Tags are comma separated with spaces allowed
+tags=pythonosm,clip,reproject
+
+homepage=
+category=Plugins
+icon=icon.png
+# experimental flag
+experimental=False
+
+# deprecated flag (applies to the whole plugin, not just a single version)
+deprecated=False
+
+# Since QGIS 3.8, a comma separated list of plugins to be installed
+# (or upgraded) can be specified.
+# Check the documentation for more information.
+# plugin_dependencies=
+
+Category of the plugin: Raster, Vector, Database or Web
+# category=
+
+# If the plugin can run on QGIS Server.
+server=False
+
