@@ -1,0 +1,27 @@
+
+name: CI for QGIS Plugin clip_reproject
+
+on:
+  push:
+    branches: [main, master]
+  pull_request:
+
+jobs:
+  lint:
+    name: Lint check
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install Ruff
+        run: pip install ruff
+
+      - name: Check for errors and style
+        run: ruff check .
+
+      - name: Check formatting
+        run: ruff format --check .
