@@ -22,27 +22,185 @@
  ***************************************************************************/
 """
 
+
 import os
 
-from qgis.PyQt import uic
-from qgis.PyQt import QtWidgets
+from qgis.PyQt import uic, QtWidgets
+from qgis.core import (
+    QgsCoordinateReferenceSystem,
+    QgsExpression,
+    QgsFeatureRequest,
+    QgsVectorLayer,
+    QgsWkbTypes,
+)
 
-# This loads your .ui file so that PyQt can populate your plugin with the elements from Qt Designer
 FORM_CLASS, _ = uic.loadUiType(
     os.path.join(
         os.path.dirname(__file__),
-        'clip_reproject_dialog_base.ui'),
+        "clip_reproject_dialog_base.ui"
+    ),
     from_imports=True,
-    import_from='clip_reproject')
+    import_from="clip_reproject"
+)
 
 
 class ClipReprojectDialog(QtWidgets.QDialog, FORM_CLASS):
+    """Диалог ввода и проверки параметров плагина."""
+
     def __init__(self, parent=None):
-        """Constructor."""
-        super(ClipReprojectDialog, self).__init__(parent)
-        # Set up the user interface from Designer through FORM_CLASS.
-        # After self.setupUi() you can access any designer object by doing
-        # self.<objectname>, and you can use autoconnect slots - see
-        # http://qt-project.org/doc/qt-4.8/designer-using-a-ui-file.html
-        # #widgets-and-dialogs-with-auto-connect
+        super().__init__(parent)
         self.setupUi(self)
+
+    def get_params(self):
+        """Получить параметры из полей формы."""
+
+        return {
+            "osm_dir": self.osm_path.filePath().strip(),
+            "boundary_path": self.adm_shp.filePath().strip(),
+            "field_name": self.field_name.text().strip(),
+            "field_value": self.field_value.text().strip(),
+            "epsg": self.target_epsg.text().strip(),
+            "result_dir": self.result_path.filePath().strip(),
+        }
+
+    def validate_inputs(self):
+        """Проверить корректность введённых данных."""
+
+        params = self.get_params()
+
+        # Проверка папки исходных слоёв
+        if not os.path.isdir(params["osm_dir"]):
+            raise ValueError(
+                "Укажите существующую папку со слоями OSM."
+            )
+
+        # Проверка административного файла
+        boundary_path = params["boundary_path"]
+
+        if not os.path.isfile(boundary_path):
+            raise ValueError(
+                "Файл административных границ не найден."
+            )
+
+        if not boundary_path.lower().endswith(
+            (".shp", ".gpkg")
+        ):
+            raise ValueError(
+                "Файл границ должен иметь формат SHP или GPKG."
+            )
+
+        # Проверка выходной папки
+        if not os.path.isdir(params["result_dir"]):
+            raise ValueError(
+                "Укажите существующую папку результатов."
+            )
+
+        # Проверка полей
+        if not params["field_name"]:
+            raise ValueError(
+                "Введите имя атрибутивного поля."
+            )
+
+        if not params["field_value"]:
+            raise ValueError(
+                "Введите значение атрибута территории."
+            )
+
+        # Проверка EPSG
+        epsg = params["epsg"].upper()
+        epsg = epsg.removeprefix("EPSG:").strip()
+
+        if not epsg.isdigit():
+            raise ValueError(
+                "EPSG-код должен содержать только цифры."
+            )
+
+        crs = QgsCoordinateReferenceSystem(
+            "EPSG:" + epsg
+        )
+
+        if not crs.isValid():
+            raise ValueError(
+                "Указанная система координат не существует."
+            )
+
+        crs_name = crs.description().upper()
+
+        if crs.isGeographic() or not (
+            "GSK-2011" in crs_name
+            or "ГСК-2011" in crs_name
+        ):
+            raise ValueError(
+                "Выберите проекционную систему ГСК-2011."
+            )
+
+        # Проверка административного слоя
+        boundary = QgsVectorLayer(
+            boundary_path,
+            "Проверка административных границ",
+            "ogr"
+        )
+
+        if not boundary.isValid():
+            raise ValueError(
+                "Не удалось открыть административный слой."
+            )
+
+        if boundary.geometryType() != QgsWkbTypes.PolygonGeometry:
+            raise ValueError(
+                "Административная граница должна быть полигоном."
+            )
+
+        if not boundary.crs().isValid():
+            raise ValueError(
+                "У административного слоя не определена СК."
+            )
+
+        if boundary.fields().indexFromName(
+            params["field_name"]
+        ) == -1:
+            raise ValueError(
+                "В административном слое отсутствует поле: "
+                + params["field_name"]
+            )
+
+        # Проверка значения атрибута
+        expression = (
+            "to_string("
+            + QgsExpression.quotedColumnRef(
+                params["field_name"]
+            )
+            + ") = "
+            + QgsExpression.quotedString(
+                params["field_value"]
+            )
+        )
+
+        request = QgsFeatureRequest().setFilterExpression(
+            expression
+        )
+        request.setLimit(1)
+
+        if next(boundary.getFeatures(request), None) is None:
+            raise ValueError(
+                "Территория с указанным значением "
+                "атрибута не найдена."
+            )
+
+        return True
+
+    def accept(self):
+        """Не закрывать окно при ошибке ввода."""
+
+        try:
+            self.validate_inputs()
+
+        except ValueError as error:
+            QtWidgets.QMessageBox.warning(
+                self,
+                "Ошибка ввода данных",
+                str(error)
+            )
+            return
+
+        super().accept()
