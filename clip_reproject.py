@@ -179,222 +179,57 @@ class ClipReproject:
             self.iface.removeToolBarIcon(action)
 
 
+   
     def run(self):
-        """Выбор территории, обрезка и перепроецирование слоёв."""
-        import os
-        import tempfile
+        """
+        Запуск плагина, получение параметров
+        и вызов модуля обработки данных.
+        """
 
-        from qgis import processing
-        from qgis.core import (
-            QgsVectorLayer,
-            QgsCoordinateReferenceSystem,
-            QgsExpression,
-            QgsFeatureRequest,
-            QgsProject,
-            QgsWkbTypes,
-            QgsProviderRegistry,
-            Qgis,
-        )
         from qgis.PyQt.QtWidgets import QMessageBox
+        from .processor import Processor
 
-        if self.first_start:
-            self.dlg = ClipReprojectDialog()
+        # Создаём окно плагина
+        if self.first_start or not hasattr(self, "dlg"):
+            self.dlg = ClipReprojectDialog(
+                self.iface.mainWindow()
+            )
             self.first_start = False
 
+        # Открываем диалоговое окно
         self.dlg.show()
+
         if not self.dlg.exec_():
             return
 
-        output_dir = None
-        saved_count = 0
+        # Получаем параметры из интерфейса
+        params = {
+            "osm_dir": self.dlg.osm_path.filePath().strip(),
+            "boundary_path": self.dlg.adm_shp.filePath().strip(),
+            "field_name": self.dlg.field_name.text().strip(),
+            "field_value": self.dlg.field_value.text().strip(),
+            "epsg": self.dlg.target_epsg.text().strip(),
+            "result_dir": self.dlg.result_path.filePath().strip(),
+        }
 
+        # Вызываем обработчик данных
         try:
-            # Читаем значения из формы.
-            osm_dir = self.dlg.osm_path.filePath().strip()
-            boundary_path = self.dlg.adm_shp.filePath().strip()
-            field_name = self.dlg.field_name.text().strip()
-            field_value = self.dlg.field_value.text().strip()
-            epsg = self.dlg.target_epsg.text().strip()
-            result_dir = self.dlg.result_path.filePath().strip()
-
-            # Проверяем введённые параметры.
-            if not os.path.isdir(osm_dir):
-                raise ValueError("Выберите существующую папку со слоями OSM.")
-
-            if not os.path.isfile(boundary_path):
-                raise ValueError("Выберите файл административных границ.")
-
-            if not os.path.isdir(result_dir):
-                raise ValueError("Выберите существующую папку результатов.")
-
-            if not field_name or not field_value:
-                raise ValueError("Введите имя поля и значение атрибута.")
-
-            epsg = epsg.upper().removeprefix("EPSG:").strip()
-            if not epsg.isdigit():
-                raise ValueError("Введите числовой EPSG-код.")
-
-            target_crs = QgsCoordinateReferenceSystem("EPSG:" + epsg)
-            if not target_crs.isValid():
-                raise ValueError("Система координат с таким EPSG не найдена.")
-
-            crs_name = target_crs.description().upper()
-            if target_crs.isGeographic() or not (
-                "GSK-2011" in crs_name or "ГСК-2011" in crs_name
-            ):
-                raise ValueError(
-                    "Для задания выберите проекционную систему ГСК-2011."
-                )
-
-            # Открываем слой административных границ.
-            boundary = QgsVectorLayer(
-                boundary_path, "Граница территории", "ogr"
-            )
-            if not boundary.isValid():
-                raise ValueError("Не удалось открыть слой границ.")
-
-            if boundary.geometryType() != QgsWkbTypes.PolygonGeometry:
-                raise ValueError("Граница должна быть полигональным слоем.")
-
-            if not boundary.crs().isValid():
-                raise ValueError("У слоя границ не определена система координат.")
-
-            if boundary.fields().indexFromName(field_name) == -1:
-                raise ValueError(
-                    "В слое границ отсутствует поле: " + field_name
-                )
-
-            # Сравниваем значения как строки: подходит для osm_id и названий.
-            expression = (
-                "to_string("
-                + QgsExpression.quotedColumnRef(field_name)
-                + ") = "
-                + QgsExpression.quotedString(field_value)
-            )
-            boundary.selectByExpression(expression)
-
-            if boundary.selectedFeatureCount() == 0:
-                raise ValueError(
-                    "Территория не найдена. Проверьте поле и значение."
-                )
-
-            request = QgsFeatureRequest().setFilterFids(
-                boundary.selectedFeatureIds()
-            )
-            mask = boundary.materialize(request)
-
-            # Читаем SHP и все векторные слои внутри GeoPackage.
-            layers = []
-            registry = QgsProviderRegistry.instance()
-            for filename in sorted(os.listdir(osm_dir)):
-                if not filename.lower().endswith((".shp", ".gpkg")):
-                    continue
-
-                path = os.path.join(osm_dir, filename)
-                if os.path.normcase(os.path.realpath(path)) == (
-                    os.path.normcase(os.path.realpath(boundary_path))
-                ):
-                    continue
-
-                details = registry.querySublayers(path)
-                vector_details = [
-                    item for item in details
-                    if item.type() == Qgis.LayerType.Vector
-                ]
-                if not vector_details:
-                    raise ValueError("Не найдены векторные слои: " + filename)
-
-                for item in vector_details:
-                    layer = QgsVectorLayer(
-                        item.uri(), item.name(), item.providerKey()
-                    )
-                    if not layer.isValid():
-                        raise ValueError("Не удалось открыть: " + filename)
-                    if layer.geometryType() not in (
-                        QgsWkbTypes.PointGeometry,
-                        QgsWkbTypes.LineGeometry,
-                        QgsWkbTypes.PolygonGeometry,
-                    ):
-                        continue
-                    if not layer.crs().isValid():
-                        raise ValueError("Не определена СК: " + filename)
-                    if layer.crs() != boundary.crs():
-                        raise ValueError(
-                            "Исходные системы координат не совпадают.\n"
-                            "Проверьте слой: " + filename + " / " + item.name()
-                        )
-                    layers.append(layer)
-
-            if not layers:
-                raise ValueError("В папке OSM не найдены векторные SHP/GPKG-слои.")
-
-            geometry_types = {layer.geometryType() for layer in layers}
-            if not {
-                QgsWkbTypes.LineGeometry,
-                QgsWkbTypes.PolygonGeometry,
-            }.issubset(geometry_types):
-                raise ValueError(
-                    "В папке должны быть минимум один линейный "
-                    "и один полигональный слой SHP или GPKG."
-                )
-
-            # Каждый запуск сохраняется в отдельную подпапку.
-            output_dir = tempfile.mkdtemp(
-                prefix="result_", dir=result_dir
-            )
-
-            for index, layer in enumerate(layers, start=1):
-                clipped = processing.run(
-                    "native:clip",
-                    {
-                        "INPUT": layer,
-                        "OVERLAY": mask,
-                        "OUTPUT": "TEMPORARY_OUTPUT",
-                    },
-                )["OUTPUT"]
-
-                output_path = os.path.join(
-                    output_dir, f"layer_{index:03d}_gsk2011.gpkg"
-                )
-
-                processing.run(
-                    "native:reprojectlayer",
-                    {
-                        "INPUT": clipped,
-                        "TARGET_CRS": target_crs,
-                        "OUTPUT": output_path,
-                    },
-                )
-
-                result_layer = QgsVectorLayer(
-                    output_path,
-                    layer.name() + "_ГСК2011",
-                    "ogr",
-                )
-                if not result_layer.isValid():
-                    raise RuntimeError(
-                        "Не удалось открыть результат: " + output_path
-                    )
-
-                QgsProject.instance().addMapLayer(result_layer)
-                saved_count += 1
+            processor = Processor()
+            result = processor.process(params)
 
             QMessageBox.information(
                 self.dlg,
                 "Обработка завершена",
-                f"Сохранено слоёв: {saved_count}\n"
-                f"Система координат: {target_crs.description()}\n"
-                f"Результаты:\n{output_dir}",
+                (
+                    f"Сохранено слоёв: {result['saved_count']}\n"
+                    f"Система координат: {result['crs_name']}\n"
+                    f"Результаты:\n{result['output_dir']}"
+                )
             )
 
         except Exception as error:
-            message = str(error)
-            if output_dir:
-                message += (
-                    f"\n\nОбработка остановлена."
-                    f"\nДобавлено готовых слоёв: {saved_count}"
-                    f"\nПапка частичных результатов:\n{output_dir}"
-                )
             QMessageBox.critical(
-                self.dlg, "Ошибка обработки", message
+                self.dlg,
+                "Ошибка обработки",
+                str(error)
             )
